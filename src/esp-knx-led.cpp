@@ -131,7 +131,7 @@ void KnxLed::configDefaultBrightness(int brightness)
 
 void KnxLed::configDefaultTemperature(int temperature)
 {
-	if (temperature >= 2700 && temperature <= 6500)
+	if (temperature == 0 || (temperature >= 2700 && temperature <= 6500))
 	{
 		defaultTemperature = temperature;
 	}
