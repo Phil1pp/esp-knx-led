@@ -2,13 +2,13 @@
 
 #include <Arduino.h>
 #if defined(ESP32)
-    #pragma message "Building KnxLed for ESP32"
-	#include "driver/ledc.h"
-	extern byte nextEsp32LedChannel; //next available LED channel for ESP32
+#pragma message "Building KnxLed for ESP32"
+#include "driver/ledc.h"
+extern byte nextEsp32LedChannel; // next available LED channel for ESP32
 #elif defined(ESP8266)
-    #pragma message "Building KnxLed for ESP8266"
+#pragma message "Building KnxLed for ESP8266"
 #else
-    #error "Wrong hardware. Not ESP8266 or ESP32"
+#error "Wrong hardware. Not ESP8266 or ESP32"
 #endif
 
 #define DIMM_STOP 0
@@ -17,11 +17,28 @@
 #define DIMM_UP 9
 #define DIMM_UNSET -1
 
+typedef struct __rgb
+{
+	uint8_t red;
+	uint8_t green;
+	uint8_t blue;
+} rgb_t;
+
+typedef struct __rgbw
+{
+	uint8_t red;
+	uint8_t green;
+	uint8_t blue;
+    uint8_t white;
+} rgbw_t;
+
 const int MIN_BRIGHTNESS = 12;
 const int MAX_BRIGHTNESS = 255;
 
 typedef void callbackBool(bool);
 typedef void callbackInt(int);
+typedef void callbackRgb(rgb_t);
+typedef void callbackRgbw(rgbw_t);
 
 class KnxLed
 {
@@ -40,25 +57,29 @@ public:
     void initDimmableLight(byte ledPin);
     void initTunableWhiteLight(byte cwPin, byte wwPin);
     void initRgbLight(byte rPin, byte gPin, byte bPin);
-    void initRgbwLight(byte rPin, byte gPin, byte bPin, byte wPin);
-    void initRgbwwLight(byte rPin, byte gPin, byte bPin, byte cwPin, byte wwPin);
+    void initRgbwLight(byte rPin, byte gPin, byte bPin, byte wPin, bool isColdWhite);
+    void initRgbcctLight(byte rPin, byte gPin, byte bPin, byte cwPin, byte wwPin);
     void setupTwBipolar();
     void setupTwTempCh();
-    
+
     void configDefaultBrightness(int brightness);
     void configDefaultTemperature(int temperature);
     void configDimmSpeed(unsigned int dimmSetSpeed);
 
-    void registerStatusCallback(callbackBool* fctn);
-    void registerBrightnessCallback(callbackInt* fctn);
-    void registerTemperatureCallback(callbackInt* fctn);
+    void registerStatusCallback(callbackBool *fctn);
+    void registerBrightnessCallback(callbackInt *fctn);
+    void registerTemperatureCallback(callbackInt *fctn);
+    void registerColorRgbCallback(callbackRgb *fctn);
+    void registerColorRgbwCallback(callbackRgbw *fctn);
 
     void switchLight(bool state);
     void setBrightness(int brightness);
     void setBrightness(int brightness, bool saveValue);
     void setTemperature(int temperature);
     void setRelDimmCmd(int dimmCmd);
-    void setRelTemperatureCmd(int temperatureCmd);    
+    void setRelTemperatureCmd(int temperatureCmd);
+    void setRgb(rgb_t rgb);
+    void setRgbw(rgbw_t rgbw);
 
     bool getSwitchState();
     int getBrightness();
@@ -70,36 +91,47 @@ private:
     bool initialized = false;
     LightTypes lightType;
     byte outputPins[5];
-    #if defined(ESP32)
-        unsigned int pwmFrequency = 5000;   // 5kHz
-        unsigned int pwmResolution = 10;    // 2^10 = 1024
-        ledc_channel_t esp32LedCh[5];
-    #elif defined(ESP8266)
-        unsigned int pwmFrequency = 2000;   // 2kHz bei Library >=3.0.0, 50Hz bei Library 2.6.3
-        unsigned int pwmResolution = 1023;  // Default is 1023
-        //All 1022 PWM steps are available at 977Hz, 488Hz, 325Hz, 244Hz, 195Hz, 162Hz, 139Hz, 122Hz, 108Hz, 97Hz, 88Hz, 81Hz, 75Hz, etc.
-        //Calculation = truncate(1/(1E-6 * 1023)) for the PWM frequencies with all (or most) discrete PWM steps. (master)
-	#endif    
+#if defined(ESP32)
+    unsigned int pwmFrequency = 5000; // 5kHz
+    unsigned int pwmResolution = 10;  // 2^10 = 1024
+    ledc_channel_t esp32LedCh[5];
+#elif defined(ESP8266)
+    unsigned int pwmFrequency = 2000;  // 2kHz bei Library >=3.0.0, 50Hz bei Library 2.6.3
+    unsigned int pwmResolution = 1023; // Default is 1023
+                                       // All 1022 PWM steps are available at 977Hz, 488Hz, 325Hz, 244Hz, 195Hz, 162Hz, 139Hz, 122Hz, 108Hz, 97Hz, 88Hz, 81Hz, 75Hz, etc.
+    // Calculation = truncate(1/(1E-6 * 1023)) for the PWM frequencies with all (or most) discrete PWM steps. (master)
+#endif
     unsigned int dimmSpeed = 6;
-    int defaultBrightness = MAX_BRIGHTNESS;   
+    int defaultBrightness = MAX_BRIGHTNESS;
     int savedBrightness = 0;
     int setpointBrightness = -1;
     int actBrightness = -1;
+    rgb_t defaultRgb;
+    rgb_t savedRgb;
+    rgb_t setpointRgb;
+    rgb_t actRgb;
+    rgbw_t defaultRgbw;
+    rgbw_t savedRgbw;
+    rgbw_t setpointRgbw;
+    rgbw_t actRgbw;
 
     int defaultTemperature = 3500;
     int setpointTemperature = defaultTemperature;
     int actTemperature = defaultTemperature;
-    
-    bool isTwBipolar = false; //Tunable White with only 2 wires
-    bool isTwTempCh = false; //Tunable White with brightness channel and temperature channel
+
+    bool isTwBipolar = false; // Tunable White with only 2 wires
+    bool isTwTempCh = false;  // Tunable White with brightness channel and temperature channel
+    bool isRgbwColdWhite = false;   //White LED on RGBW is warm or cold white
 
     unsigned int dimmCount = 0;
     int relDimmCmd = DIMM_UNSET;
     int relTemperatureCmd = DIMM_UNSET;
 
-    callbackBool* returnStatusFctn;
-    callbackInt* returnBrightnessFctn;
-    callbackInt* returnTemperatureFctn;
+    callbackBool *returnStatusFctn;
+    callbackInt *returnBrightnessFctn;
+    callbackInt *returnTemperatureFctn;
+    callbackRgb *returnColorRgbFctn;
+    callbackRgbw *returnColorRgbwFctn;
     void fade();
     void pwmControl();
     void ledAnalogWrite(byte channel, int duty);

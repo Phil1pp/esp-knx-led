@@ -68,7 +68,61 @@ void KnxLed::switchLight(bool state)
 		break;
 	}
 	case RGB:
+	{
+		if (state)
+		{
+			if (defaultRgb.red > 0 || defaultRgb.green > 0 || defaultRgb.blue > 0)
+			{
+				setRgb(defaultRgb);
+			}
+			// If default brightness is set to 0, the last brightness will be restored
+			if (savedRgb.red > 0 || savedRgb.green > 0 || savedRgb.blue > 0)
+			{
+				setRgb(savedRgb);
+			}
+			else
+			{
+				setRgb({255, 255, 255});
+			}
+		}
+		else
+		{
+			if (setpointRgb.red > 0 || setpointRgb.green > 0 || setpointRgb.blue > 0)
+			{
+				savedRgb = setpointRgb;
+			}
+			setRgb({0, 0, 0});
+		}
+		break;
+	}
 	case RGBW:
+	{
+		if (state)
+		{
+			if (defaultRgbw.red > 0 || defaultRgbw.green > 0 || defaultRgbw.blue > 0 || defaultRgbw.white > 0)
+			{
+				setRgbw(defaultRgbw);
+			}
+			// If default brightness is set to 0, the last brightness will be restored
+			if (savedRgbw.red > 0 || savedRgbw.green > 0 || savedRgbw.blue > 0 || savedRgbw.white > 0)
+			{
+				setRgbw(savedRgbw);
+			}
+			else
+			{
+				setRgbw({255, 255, 255, 255});
+			}
+		}
+		else
+		{
+			if (setpointRgbw.red > 0 || setpointRgbw.green > 0 || setpointRgbw.blue > 0 || setpointRgbw.white > 0)
+			{
+				savedRgbw = setpointRgbw;
+			}
+			setRgbw({0, 0, 0, 0});
+		}
+		break;
+	}
 	case RGBWW:
 		// TODO;
 		break;
@@ -162,6 +216,52 @@ void KnxLed::setRelTemperatureCmd(int temperatureCmd)
 		relTemperatureCmd = DIMM_STOP;
 }
 
+void KnxLed::setRgb(rgb_t rgb)
+{
+	if (!initialized)
+		return;
+
+	if (rgb.red != setpointRgb.red || rgb.green != setpointRgb.green || rgb.blue != setpointRgb.blue)
+	{
+		setpointRgb = rgb;
+		if (setpointRgb.red > 0 || setpointRgb.green > 0 || setpointRgb.blue > 0)
+		{
+			savedRgb = setpointRgb;
+		}
+
+		if (returnColorRgbFctn != nullptr)
+		{
+			returnColorRgbFctn(setpointRgb);
+		}
+		//TODO REL COLOR SHIFT
+		relDimmCmd = DIMM_UNSET;
+		relTemperatureCmd = DIMM_UNSET;
+	}
+}
+
+void KnxLed::setRgbw(rgbw_t rgbw)
+{
+	if (!initialized)
+		return;
+
+	if (rgbw.red != setpointRgbw.red || rgbw.green != setpointRgbw.green || rgbw.blue != setpointRgbw.blue || rgbw.white != setpointRgbw.white)
+	{
+		setpointRgbw = rgbw;
+		if (setpointRgbw.red > 0 || setpointRgbw.green > 0 || setpointRgbw.blue > 0 || setpointRgbw.white > 0)
+		{
+			savedRgbw = setpointRgbw;
+		}
+
+		if (returnColorRgbwFctn != nullptr)
+		{
+			returnColorRgbwFctn(setpointRgbw);
+		}
+		//TODO REL COLOR SHIFT
+		relDimmCmd = DIMM_UNSET;
+		relTemperatureCmd = DIMM_UNSET;
+	}
+}
+
 void KnxLed::loop()
 {
 	if (initialized)
@@ -252,6 +352,21 @@ void KnxLed::fade()
 		updatePwm = true;
 	}
 
+	//TODO RGB fading
+	//RGB fading with ++/-- on R, G and B won't work
+	//For proper RGB fading, all RGB values have to be converted to HSV
+	//On HSV all 3 values can be simply faded by ++/--
+	if (actRgb.red != setpointRgb.red || actRgb.green != setpointRgb.green || actRgb.blue != setpointRgb.blue)
+	{
+		actRgb = setpointRgb;
+		updatePwm = true;
+	}
+	if (actRgbw.red != setpointRgbw.red || actRgbw.green != setpointRgbw.green || actRgbw.blue != setpointRgbw.blue || actRgbw.white != setpointRgbw.white)
+	{
+		actRgbw = setpointRgbw;
+		updatePwm = true;
+	}
+
 	// to avoid flickering, only update on change
 	if (updatePwm)
 	{
@@ -316,7 +431,18 @@ void KnxLed::pwmControl()
 		break;
 	}
 	case RGB:
+	{
+		ledAnalogWrite(0, (int)actRgbw.red*1023/255);
+		ledAnalogWrite(1, (int)actRgbw.green*1023/255);
+		ledAnalogWrite(2, (int)actRgbw.blue*1023/255);
+	}
 	case RGBW:
+	{
+		ledAnalogWrite(0, (int)actRgbw.red*1023/255);
+		ledAnalogWrite(1, (int)actRgbw.green*1023/255);
+		ledAnalogWrite(2, (int)actRgbw.blue*1023/255);
+		ledAnalogWrite(3, (int)actRgbw.white*1023/255);
+	}
 	case RGBWW:
 		// TODO;
 		break;
@@ -360,6 +486,16 @@ void KnxLed::registerBrightnessCallback(callbackInt *fctn)
 void KnxLed::registerTemperatureCallback(callbackInt *fctn)
 {
 	returnTemperatureFctn = fctn;
+}
+
+void KnxLed::registerColorRgbCallback(callbackRgb *fctn)
+{
+	returnColorRgbFctn = fctn;
+}
+
+void KnxLed::registerColorRgbwCallback(callbackRgbw *fctn)
+{
+	returnColorRgbwFctn = fctn;
 }
 
 void KnxLed::initSwitchableLight(byte switchPin)
@@ -448,13 +584,14 @@ void KnxLed::initRgbLight(byte rPin, byte gPin, byte bPin)
 #endif
 }
 
-void KnxLed::initRgbwLight(byte rPin, byte gPin, byte bPin, byte wPin)
+void KnxLed::initRgbwLight(byte rPin, byte gPin, byte bPin, byte wPin, bool isColdWhite)
 {
 	lightType = RGBW;
 	outputPins[0] = rPin;
 	outputPins[1] = gPin;
 	outputPins[2] = bPin;
 	outputPins[3] = wPin;
+	isRgbwColdWhite = isColdWhite;
 
 #if defined(ESP32)
 	if (nextEsp32LedChannel <= LEDC_CHANNEL_MAX - 4)
@@ -484,7 +621,7 @@ void KnxLed::initRgbwLight(byte rPin, byte gPin, byte bPin, byte wPin)
 #endif
 }
 
-void KnxLed::initRgbwwLight(byte rPin, byte gPin, byte bPin, byte cwPin, byte wwPin)
+void KnxLed::initRgbcctLight(byte rPin, byte gPin, byte bPin, byte cwPin, byte wwPin)
 {
 	lightType = RGBWW;
 	outputPins[0] = rPin;
