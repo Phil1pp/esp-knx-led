@@ -79,16 +79,19 @@ typedef struct __rgb
     }
 } rgb_t;
 
+typedef struct __rgbw
+{
+	uint8_t red;
+	uint8_t green;
+    uint8_t blue;
+    uint8_t white;
+} rgbw_t;
+
 typedef struct __kelvinTableRGB {
-	uint kelvin;
+	uint16_t kelvin;
 	uint8_t red;
 	uint8_t green;
 	uint8_t blue;
-
-    inline bool operator==(const uint cmp) const {
-        uint c = cmp - (cmp % 100); // round to nearest value
-        return (kelvin == c);
-    }
 } kelvinTable_t;
 
 typedef void callbackBool(bool);
@@ -118,7 +121,7 @@ public:
     void initDimmableLight(uint8_t ledPin);
     void initTunableWhiteLight(uint8_t cwPin, uint8_t wwPin, __cctMode cctMode);
     void initRgbLight(uint8_t rPin, uint8_t gPin, uint8_t bPin);
-    void initRgbwLight(uint8_t rPin, uint8_t gPin, uint8_t bPin, uint8_t wPin, bool isColdWhite);
+    void initRgbwLight(uint8_t rPin, uint8_t gPin, uint8_t bPin, uint8_t wPin, rgb_t whiteLedRgbEquivalent);
     void initRgbcctLight(uint8_t rPin, uint8_t gPin, uint8_t bPin, uint8_t cwPin, uint8_t wwPin, __cctMode cctMode);
 
     void configDefaultBrightness(int brightness);
@@ -179,6 +182,7 @@ private:
     hsv_t setpointHsv;
     hsv_t actHsv;
 
+    rgb_t whiteRgbEquivalent = {255, 219, 186}; //4500k color temperature warm white LED
     int defaultTemperature = 3500;
     int setpointTemperature = defaultTemperature;
     int actTemperature = defaultTemperature;
@@ -204,4 +208,8 @@ private:
     void ledAnalogWrite(byte channel, int duty);
     void rgb2hsv(const rgb_t rgb, hsv_t &hsv);
     void hsv2rgb(const hsv_t hsv, rgb_t &rgb);
+    void kelvin2rgb(const uint16_t temperature, rgb_t &rgb);
+    void kelvin2rgb(const uint16_t temperature, const uint8_t brightness, rgb_t &rgb);
+    void kelvin2rgbw(const uint16_t temperature, const uint8_t brightness, rgbw_t &rgbw);
+    void rgb2Rgbw(const rgb_t rgb, rgbw_t &rgbw);
 };

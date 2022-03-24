@@ -3,7 +3,10 @@
 byte nextEsp32LedChannel = LEDC_CHANNEL_0; // next available LED channel for ESP32
 #endif
 
-const PROGMEM kelvinTable_t kelvinTable[] = {
+// lookup table for kelvin to rgb conversion
+// crashes when using PROGMEM here
+const kelvinTable_t kelvinTable[] = {
+	{0, 0, 0, 0},
 	{2700, 255, 169, 87},
 	{2800, 255, 173, 94},
 	{2900, 255, 177, 101},
@@ -436,19 +439,7 @@ void KnxLed::pwmControl()
 	}
 	case TUNABLEWHITE:
 	{
-		if (!isTwBipolar)
-		{
-			// Dimming curve adapted for maximum brightness: CW ^ WW
-			int dutyCh0 = round(min(2 * (actTemperature - 2700), 3800) / 3800.0 * actBrightness);
-			int dutyCh1 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * actBrightness);
-			ledAnalogWrite(0, lookupTable[dutyCh0]);
-			ledAnalogWrite(1, lookupTable[dutyCh1]);
-		}
-		else if (isTwTempCh)
-		{
-			// TODO
-		}
-		else
+		if (isTwBipolar)
 		{
 			// 2-Wire tunable LEDs. Different polarity for each channel controlled by 4quadrant H-Brige
 			float maxBt = actBrightness * 1023.0 / MAX_BRIGHTNESS / 3800.0;
@@ -466,6 +457,24 @@ void KnxLed::pwmControl()
 			ledAnalogWrite(1, lookupTable[dutyCh1]);
 #endif
 		}
+		else
+		{
+			int dutyCh0 = 0;
+			int dutyCh1 = 0;
+
+			if (!isTwTempCh)
+			{
+				dutyCh0 = round(min(2 * (actTemperature - 2700), 3800) / 3800.0 * actBrightness);
+				dutyCh1 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * actBrightness);
+			}
+			else if (actBrightness > 0)
+			{
+				int dutyCh0 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * MAX_BRIGHTNESS);
+				int dutyCh1 = actBrightness;
+			}
+			ledAnalogWrite(0, lookupTable[dutyCh0]);
+			ledAnalogWrite(1, lookupTable[dutyCh1]);
+		}
 		break;
 	}
 	case RGB:
@@ -476,61 +485,55 @@ void KnxLed::pwmControl()
 		ledAnalogWrite(0, (int)_rgb.red * 1023 / 255);
 		ledAnalogWrite(1, (int)_rgb.green * 1023 / 255);
 		ledAnalogWrite(2, (int)_rgb.blue * 1023 / 255);
+		break;
 	}
 	case RGBW:
 	{
 		rgb_t _rgb;
-		hsv2rgb(actHsv, _rgb);
+		// Die folgenden Berechnungen sollten bereits vor dem Fade durchgeführt werden, damit ein schönes Fading garantiert wird
+		if (currentLightMode == MODE_RGB)
+		{
+			hsv2rgb(actHsv, _rgb);
+		}
+		else
+		{
+			kelvin2rgb(actTemperature, actBrightness, _rgb);
+		}
 
-		ledAnalogWrite(0, (int)_rgb.red * 1023 / 255);
-		ledAnalogWrite(1, (int)_rgb.green * 1023 / 255);
-		ledAnalogWrite(2, (int)_rgb.blue * 1023 / 255);
-		uint8_t minVal = min(_rgb.red, min(_rgb.green, _rgb.blue));
-		ledAnalogWrite(3, (int)minVal * 1023 / 255);
+		rgbw_t _rgbw;
+		rgb2Rgbw(_rgb, _rgbw);
+
+		ledAnalogWrite(0, (int)_rgbw.red * 1023 / 255);
+		ledAnalogWrite(1, (int)_rgbw.green * 1023 / 255);
+		ledAnalogWrite(2, (int)_rgbw.blue * 1023 / 255);
+		ledAnalogWrite(3, (int)_rgbw.white * 1023 / 255);
+
+		break;
 	}
 	case RGBCT:
-		/*switch (currentLightMode)
-		{
-		case MODE_RGB:*/
 		rgb_t _rgb;
 		hsv2rgb(actHsv, _rgb);
 		// Serial.printf("PWM IST: R=%3d,G=%3d,B=%3d H=%3d,S=%3d,V=%3d\n", _rgb.red, _rgb.green, _rgb.blue, actHsv.h, actHsv.s, actHsv.v);
 
-		// ledAnalogWrite(3, 0); // cwPin
-		// ledAnalogWrite(4, 0); // wwPin
-
 		ledAnalogWrite(0, (int)_rgb.red * 1023 / 255);
 		ledAnalogWrite(1, (int)_rgb.green * 1023 / 255);
 		ledAnalogWrite(2, (int)_rgb.blue * 1023 / 255);
 
-		int dutyCh0 = round(min(2 * (actTemperature - 2700), 3800) / 3800.0 * (actBrightness - actHsv.v));
-		int dutyCh1 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * (actBrightness - actHsv.v));
+		int dutyCh0 = 0;
+		int dutyCh1 = 0;
+
+		if (!isTwTempCh)
+		{
+			dutyCh0 = round(min(2 * (actTemperature - 2700), 3800) / 3800.0 * (actBrightness - actHsv.v));
+			dutyCh1 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * (actBrightness - actHsv.v));
+		}
+		else if (actBrightness > actHsv.v)
+		{
+			int dutyCh0 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * MAX_BRIGHTNESS);
+			int dutyCh1 = actBrightness - actHsv.v;
+		}
 		ledAnalogWrite(3, lookupTable[dutyCh0]);
 		ledAnalogWrite(4, lookupTable[dutyCh1]);
-
-		// for testing rgbw on rgb cct
-		// hue to temperature and min to brightness
-
-		/*	break;
-		case MODE_CCT:
-			ledAnalogWrite(0, 0); // R
-			ledAnalogWrite(1, 0); // G
-			ledAnalogWrite(2, 0); // B
-
-			if (!isTwTempCh)
-			{
-				int dutyCh0 = round(min(2 * (actTemperature - 2700), 3800) / 3800.0 * actBrightness);
-				int dutyCh1 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * actBrightness);
-				ledAnalogWrite(3, lookupTable[dutyCh0]);
-				ledAnalogWrite(4, lookupTable[dutyCh1]);
-			}
-			else if (isTwTempCh)
-			{
-				// TODO
-			}
-			break;
-		}
-		break;*/
 	}
 }
 
@@ -617,7 +620,7 @@ void KnxLed::initRgbLight(uint8_t rPin, uint8_t gPin, uint8_t bPin)
 	initOutputChannels(3);
 }
 
-void KnxLed::initRgbwLight(uint8_t rPin, uint8_t gPin, uint8_t bPin, uint8_t wPin, bool isColdWhite)
+void KnxLed::initRgbwLight(uint8_t rPin, uint8_t gPin, uint8_t bPin, uint8_t wPin, rgb_t whiteLedRgbEquivalent)
 {
 	lightType = RGBW;
 	currentLightMode = MODE_RGB;
@@ -625,7 +628,7 @@ void KnxLed::initRgbwLight(uint8_t rPin, uint8_t gPin, uint8_t bPin, uint8_t wPi
 	outputPins[1] = gPin;
 	outputPins[2] = bPin;
 	outputPins[3] = wPin;
-	isRgbwColdWhite = isColdWhite;
+	whiteRgbEquivalent = whiteLedRgbEquivalent;
 	initOutputChannels(4);
 }
 
@@ -667,8 +670,6 @@ void KnxLed::initOutputChannels(uint8_t usedChannels)
 	initialized = true;
 }
 
-// rgb to hsv conversion
-// original code from rgb/hsv conversion comes from https://gist.github.com/yoggy/8999625
 void KnxLed::rgb2hsv(const rgb_t rgb, hsv_t &hsv)
 {
 	float r = rgb.red / 255.0f;
@@ -724,7 +725,6 @@ void KnxLed::rgb2hsv(const rgb_t rgb, hsv_t &hsv)
 	hsv.v = round(v * 255.0f); // dst_v : 0-255
 }
 
-// hsv to rgb - used for pwm output
 void KnxLed::hsv2rgb(const hsv_t hsv, rgb_t &rgb)
 {
 	float h = hsv.h;		  // 0-360
@@ -761,7 +761,97 @@ void KnxLed::hsv2rgb(const hsv_t hsv, rgb_t &rgb)
 		break;
 	}
 
-	rgb.red = round(r * 255.0f);   // dst_r : 0-255
-	rgb.green = round(g * 255.0f); // dst_r : 0-255
-	rgb.blue = round(b * 255.0f);  // dst_r : 0-255
+	rgb.red = round(r * 255.0f);
+	rgb.green = round(g * 255.0f);
+	rgb.blue = round(b * 255.0f);
+}
+
+void KnxLed::kelvin2rgb(const uint16_t temperature, const uint8_t brightness, rgb_t &rgb)
+{
+	float red;
+	float green;
+	float blue;
+	float temp = constrain(temperature, 500, 40000) / 100;
+
+	// Calculate red
+	if (temp <= 66)
+	{
+		red = 255;
+	}
+	else
+	{
+		red = 329.698727446 * pow(temp - 60, -0.1332047592);
+	}
+
+	// Calculate green
+	if (temp < 66)
+	{
+		green = 99.4708025861 * log(temp) - 161.1195681661;
+	}
+	else
+	{
+		green = 288.1221695283 * pow(temp - 60, -0.0755148492);
+	}
+
+	// Calculate blue
+	if (temp <= 19)
+	{
+		blue = 0;
+	}
+	else if (temp <= 66)
+	{
+		blue = 138.5177312231 * log(temp - 10) - 305.0447927307;
+	}
+	else
+	{
+		blue = 255;
+	}
+
+	red = red * brightness / 255;
+	green = green * brightness / 255;
+	blue = blue * brightness / 255;
+
+	// Constrains values for 8 bit PWM
+	rgb.red = constrain(red, 0, 255) + 0.5;
+	rgb.green = constrain(green, 0, 255) + 0.5;
+	rgb.blue = constrain(blue, 0, 255) + 0.5;
+}
+
+void KnxLed::rgb2Rgbw(const rgb_t rgb, rgbw_t &rgbw)
+{
+	// be to get the corresponding color value.
+	double whiteValueForRed = rgb.red * 255.0 / whiteRgbEquivalent.red;
+	double whiteValueForGreen = rgb.green * 255.0 / whiteRgbEquivalent.green;
+	double whiteValueForBlue = rgb.blue * 255.0 / whiteRgbEquivalent.blue;
+
+	// Set the white value to the highest it can be for the given color
+	// (without over saturating any channel - thus the minimum of them).
+	double minWhiteValue = min(whiteValueForRed,
+							   min(whiteValueForGreen,
+								   whiteValueForBlue));
+
+	// The rest of the channels will just be the original value minus the
+	// contribution by the white channel.
+	rgbw.red = rgb.red - round(minWhiteValue * whiteRgbEquivalent.red / 255.0);
+	rgbw.green = rgb.green - round(minWhiteValue * whiteRgbEquivalent.green / 255.0);
+	rgbw.blue = rgb.blue - round(minWhiteValue * whiteRgbEquivalent.blue / 255.0);
+	rgbw.white = constrain(minWhiteValue, 0, 255) + 0.5;
+	// Serial.printf("RGB IN: R=%3d,G=%3d,B=%3d OUT R=%3d,G=%3d,B=%3d,W=%3d\n", rgb.red, rgb.green, rgb.blue, rgbw.red, rgbw.green, rgbw.blue, rgbw.white);
+
+	double maxRgbIn = max(rgb.red,
+						  max(rgb.green,
+							  rgb.blue));
+	double maxRgbOut = max(rgbw.red, max(rgbw.green,
+										 max(rgbw.blue,
+											 rgbw.white)));
+	double factor = 0.0;
+	if (maxRgbOut > 0)
+	{
+		factor = maxRgbIn / maxRgbOut;
+	}
+	rgbw.red = round(rgbw.red * factor);
+	rgbw.green = round(rgbw.green * factor);
+	rgbw.blue = round(rgbw.blue * factor);
+	rgbw.white = round(rgbw.white * factor);
+	// Serial.printf("RGB OUT2 R=%3d,G=%3d,B=%3d,W=%3d\n", rgbw.red, rgbw.green, rgbw.blue, rgbw.white);
 }
