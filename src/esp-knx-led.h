@@ -23,22 +23,39 @@ extern byte nextEsp32LedChannel; // next available LED channel for ESP32
 #define min_f(a, b, c)  (fminf(a, fminf(b, c)))
 #define max_f(a, b, c)  (fmaxf(a, fmaxf(b, c)))
 
+// lookup table for logarithmic dimming curve
+const uint16_t lookupTable[] = {
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+	24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 41, 42, 43, 44, 45,
+	47, 48, 49, 51, 52, 53, 54, 56, 57, 59, 60, 61, 63, 64, 66, 67, 69, 70, 72, 73,
+	75, 76, 78, 79, 81, 83, 84, 86, 88, 89, 91, 93, 95, 96, 98, 100, 102, 104, 106,
+	108, 109, 111, 113, 115, 117, 120, 122, 124, 126, 128, 130, 132, 135, 137, 139,
+	142, 144, 146, 149, 151, 154, 156, 159, 161, 164, 166, 169, 172, 174, 177, 180,
+	183, 185, 188, 191, 194, 197, 200, 203, 206, 209, 212, 215, 219, 222, 225, 228,
+	232, 235, 238, 242, 245, 249, 252, 256, 260, 263, 267, 271, 275, 278, 282, 286,
+	290, 294, 298, 302, 306, 310, 315, 319, 323, 327, 332, 336, 341, 345, 350, 354,
+	359, 364, 368, 373, 378, 383, 388, 392, 397, 403, 408, 413, 418, 423, 428, 434,
+	439, 445, 450, 456, 461, 467, 472, 478, 484, 490, 496, 502, 508, 514, 520, 526,
+	532, 538, 545, 551, 557, 564, 570, 577, 584, 590, 597, 604, 611, 618, 625, 632,
+	639, 646, 653, 660, 668, 675, 683, 690, 698, 705, 713, 721, 729, 736, 744, 752,
+	760, 769, 777, 785, 793, 802, 810, 819, 827, 836, 845, 853, 862, 871, 880, 889,
+	898, 907, 917, 926, 935, 945, 954, 964, 973, 983, 993, 1003, 1013, 1023};
+
 enum __cctMode { normal, bipolar, tempChannel }; //CCT mode: normal (2 separate channels), bipolar (2 instead of 3 wires), temperature control channel (CH1=brightness, CH2=temperature)
 
 typedef struct __hsv {
-    uint16_t h; //hue
+    uint8_t h; //hue
     uint8_t s; //sat
     uint8_t v; //val==brightness
 
     void fromDPT232600 (uint32_t raw) {
-        h = round(((raw >> 16) & 0xFF) * 359.0f/255.0f); // convert knx hsv from 0..255 -> 0..359
+        h = (raw >> 16) & 0xFF;
         s = (raw >> 8) & 0xFF;
         v = raw & 0xFF;
     }
 
     uint32_t toDPT232600 (void) {
-        uint8_t _h = round(h*255.0f/359.0); // convert to knx hsv from 0..359 -> 0..255
-        return (_h << 16) | (s << 8) | v;
+        return (h << 16) | (s << 8) | v;
     }
 
     inline bool operator!=(const __hsv &cmp) const {
@@ -46,10 +63,10 @@ typedef struct __hsv {
     }
 
     int changedPercent (const __hsv &cmp) {
-        uint16_t _h = round(abs(h - cmp.h) * 359.0f / 100.0f);
+        uint8_t _h = round(abs(h - cmp.h) * 255.0f / 100.0f);
         uint8_t _s = round(abs(s - cmp.s) * 255.0f / 100.0f);
         uint8_t _v = round(abs(v - cmp.v) * 255.0f / 100.0f);
-        return max(_h, (uint16_t)max(_s,_v));
+        return max(_h, max(_s,_v));
     }
 } hsv_t;
 
@@ -86,13 +103,6 @@ typedef struct __rgbw
     uint8_t blue;
     uint8_t white;
 } rgbw_t;
-
-typedef struct __kelvinTableRGB {
-	uint16_t kelvin;
-	uint8_t red;
-	uint8_t green;
-	uint8_t blue;
-} kelvinTable_t;
 
 typedef void callbackBool(bool);
 typedef void callbackInt(int);
@@ -205,11 +215,10 @@ private:
     void initOutputChannels (uint8_t usedChannels);
     void fade();
     void pwmControl();
-    void ledAnalogWrite(byte channel, int duty);
+    void ledAnalogWrite(byte channel, uint16_t duty);
     void rgb2hsv(const rgb_t rgb, hsv_t &hsv);
     void hsv2rgb(const hsv_t hsv, rgb_t &rgb);
-    void kelvin2rgb(const uint16_t temperature, rgb_t &rgb);
     void kelvin2rgb(const uint16_t temperature, const uint8_t brightness, rgb_t &rgb);
-    void kelvin2rgbw(const uint16_t temperature, const uint8_t brightness, rgbw_t &rgbw);
     void rgb2Rgbw(const rgb_t rgb, rgbw_t &rgbw);
+    uint8_t rgb2White(const rgb_t rgb);
 };

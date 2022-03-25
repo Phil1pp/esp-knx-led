@@ -3,69 +3,6 @@
 byte nextEsp32LedChannel = LEDC_CHANNEL_0; // next available LED channel for ESP32
 #endif
 
-// lookup table for kelvin to rgb conversion
-// crashes when using PROGMEM here
-const kelvinTable_t kelvinTable[] = {
-	{0, 0, 0, 0},
-	{2700, 255, 169, 87},
-	{2800, 255, 173, 94},
-	{2900, 255, 177, 101},
-	{3000, 255, 180, 107},
-	{3100, 255, 184, 114},
-	{3200, 255, 187, 120},
-	{3300, 255, 190, 126},
-	{3400, 255, 193, 132},
-	{3500, 255, 196, 137},
-	{3600, 255, 199, 143},
-	{3700, 255, 201, 148},
-	{3800, 255, 204, 153},
-	{3900, 255, 206, 159},
-	{4000, 255, 209, 163},
-	{4100, 255, 211, 168},
-	{4200, 255, 213, 173},
-	{4300, 255, 215, 177},
-	{4400, 255, 217, 182},
-	{4500, 255, 219, 186},
-	{4600, 255, 221, 190},
-	{4700, 255, 223, 194},
-	{4800, 255, 225, 198},
-	{4900, 255, 227, 202},
-	{5000, 255, 228, 206},
-	{5100, 255, 230, 210},
-	{5200, 255, 232, 213},
-	{5300, 255, 233, 217},
-	{5400, 255, 235, 220},
-	{5500, 255, 236, 224},
-	{5600, 255, 238, 227},
-	{5700, 255, 239, 230},
-	{5800, 255, 240, 233},
-	{5900, 255, 242, 236},
-	{6000, 255, 243, 239},
-	{6100, 255, 244, 242},
-	{6200, 255, 245, 245},
-	{6300, 255, 246, 247},
-	{6400, 255, 248, 251},
-	{6500, 255, 249, 253},
-};
-
-// lookup table for logarithmic dimming curve
-const PROGMEM int lookupTable[] = {
-	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-	24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 41, 42, 43, 44, 45,
-	47, 48, 49, 51, 52, 53, 54, 56, 57, 59, 60, 61, 63, 64, 66, 67, 69, 70, 72, 73,
-	75, 76, 78, 79, 81, 83, 84, 86, 88, 89, 91, 93, 95, 96, 98, 100, 102, 104, 106,
-	108, 109, 111, 113, 115, 117, 120, 122, 124, 126, 128, 130, 132, 135, 137, 139,
-	142, 144, 146, 149, 151, 154, 156, 159, 161, 164, 166, 169, 172, 174, 177, 180,
-	183, 185, 188, 191, 194, 197, 200, 203, 206, 209, 212, 215, 219, 222, 225, 228,
-	232, 235, 238, 242, 245, 249, 252, 256, 260, 263, 267, 271, 275, 278, 282, 286,
-	290, 294, 298, 302, 306, 310, 315, 319, 323, 327, 332, 336, 341, 345, 350, 354,
-	359, 364, 368, 373, 378, 383, 388, 392, 397, 403, 408, 413, 418, 423, 428, 434,
-	439, 445, 450, 456, 461, 467, 472, 478, 484, 490, 496, 502, 508, 514, 520, 526,
-	532, 538, 545, 551, 557, 564, 570, 577, 584, 590, 597, 604, 611, 618, 625, 632,
-	639, 646, 653, 660, 668, 675, 683, 690, 698, 705, 713, 721, 729, 736, 744, 752,
-	760, 769, 777, 785, 793, 802, 810, 819, 827, 836, 845, 853, 862, 871, 880, 889,
-	898, 907, 917, 926, 935, 945, 954, 964, 973, 983, 993, 1003, 1013, 1023};
-
 void KnxLed::switchLight(bool state)
 {
 	switch (lightType)
@@ -190,6 +127,14 @@ void KnxLed::setTemperature(int temperature)
 	{
 		actTemperature = setpointTemperature;
 		currentLightMode = MODE_CCT;
+	}
+	if (lightType == RGBW)
+	{
+		rgb_t _rgb;
+		hsv_t _hsv;
+		kelvin2rgb(setpointTemperature, setpointBrightness, _rgb);
+		rgb2hsv(_rgb, _hsv);
+		setpointHsv = _hsv;
 	}
 }
 
@@ -367,39 +312,45 @@ void KnxLed::fade()
 		updatePwm = true;
 	}
 
-	if (setpointHsv.h != actHsv.h)
+	uint8_t diffH = abs(setpointHsv.h - actHsv.h);
+	if (diffH > 0)
 	{
-		bool do360overflow = abs(setpointHsv.h - actHsv.h) > 180;
+		bool do360overflow = diffH > 128;
 		if ((setpointHsv.h > actHsv.h) != do360overflow)
 		{
-			actHsv.h = (actHsv.h + 1) % 360;
+			actHsv.h = (actHsv.h + 1) % 256;
 		}
 		else
 		{
-			actHsv.h = (actHsv.h + 359) % 360;
+			actHsv.h = (actHsv.h + 255) % 256;
 		}
 		updatePwm = true;
 	}
 
-	if (setpointHsv.s != actHsv.s)
+	if (diffH > 43 && (setpointHsv.s - actHsv.s) < diffH && actHsv.s > 1)
+	{
+		actHsv.s -= 2;
+		updatePwm = true;
+	}
+	else if (setpointHsv.s != actHsv.s)
 	{
 		actHsv.s += setpointHsv.s > actHsv.s ? 1 : -1;
 		updatePwm = true;
 	}
 
-	if (currentLightMode == MODE_RGB)
+	if (lightType == RGBCT && currentLightMode == MODE_CCT)
 	{
-		if (setpointBrightness != actHsv.v)
+		if (actHsv.v > 0)
 		{
-			actHsv.v += setpointBrightness > actHsv.v ? 1 : -1;
+			actHsv.v -= 1;
 			updatePwm = true;
 		}
 	}
 	else
 	{
-		if (actHsv.v > 0)
+		if (setpointBrightness != actHsv.v)
 		{
-			actHsv.v -= 1;
+			actHsv.v += setpointBrightness > actHsv.v ? 1 : -1;
 			updatePwm = true;
 		}
 	}
@@ -469,8 +420,8 @@ void KnxLed::pwmControl()
 			}
 			else if (actBrightness > 0)
 			{
-				int dutyCh0 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * MAX_BRIGHTNESS);
-				int dutyCh1 = actBrightness;
+				dutyCh0 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * MAX_BRIGHTNESS);
+				dutyCh1 = actBrightness;
 			}
 			ledAnalogWrite(0, lookupTable[dutyCh0]);
 			ledAnalogWrite(1, lookupTable[dutyCh1]);
@@ -482,31 +433,29 @@ void KnxLed::pwmControl()
 		rgb_t _rgb;
 		hsv2rgb(actHsv, _rgb);
 
-		ledAnalogWrite(0, (int)_rgb.red * 1023 / 255);
-		ledAnalogWrite(1, (int)_rgb.green * 1023 / 255);
-		ledAnalogWrite(2, (int)_rgb.blue * 1023 / 255);
+		ledAnalogWrite(0, lookupTable[_rgb.red]);
+		ledAnalogWrite(1, lookupTable[_rgb.green]);
+		ledAnalogWrite(2, lookupTable[_rgb.blue]);
 		break;
 	}
 	case RGBW:
 	{
 		rgb_t _rgb;
-		// Die folgenden Berechnungen sollten bereits vor dem Fade durchgeführt werden, damit ein schönes Fading garantiert wird
-		if (currentLightMode == MODE_RGB)
-		{
-			hsv2rgb(actHsv, _rgb);
-		}
-		else
-		{
-			kelvin2rgb(actTemperature, actBrightness, _rgb);
-		}
+		hsv2rgb(actHsv, _rgb);
+		uint8_t white = rgb2White(_rgb);
 
-		rgbw_t _rgbw;
+		ledAnalogWrite(0, lookupTable[_rgb.red]);
+		ledAnalogWrite(1, lookupTable[_rgb.green]);
+		ledAnalogWrite(2, lookupTable[_rgb.blue]);
+		ledAnalogWrite(3, lookupTable[white]);
+		
+		/*rgbw_t _rgbw;
 		rgb2Rgbw(_rgb, _rgbw);
 
-		ledAnalogWrite(0, (int)_rgbw.red * 1023 / 255);
-		ledAnalogWrite(1, (int)_rgbw.green * 1023 / 255);
-		ledAnalogWrite(2, (int)_rgbw.blue * 1023 / 255);
-		ledAnalogWrite(3, (int)_rgbw.white * 1023 / 255);
+		ledAnalogWrite(0, lookupTable[_rgbw.red]);
+		ledAnalogWrite(1, lookupTable[_rgbw.green]);
+		ledAnalogWrite(2, lookupTable[_rgbw.blue]);
+		ledAnalogWrite(3, lookupTable[_rgbw.white]);*/
 
 		break;
 	}
@@ -515,9 +464,9 @@ void KnxLed::pwmControl()
 		hsv2rgb(actHsv, _rgb);
 		// Serial.printf("PWM IST: R=%3d,G=%3d,B=%3d H=%3d,S=%3d,V=%3d\n", _rgb.red, _rgb.green, _rgb.blue, actHsv.h, actHsv.s, actHsv.v);
 
-		ledAnalogWrite(0, (int)_rgb.red * 1023 / 255);
-		ledAnalogWrite(1, (int)_rgb.green * 1023 / 255);
-		ledAnalogWrite(2, (int)_rgb.blue * 1023 / 255);
+		ledAnalogWrite(0, lookupTable[_rgb.red]);
+		ledAnalogWrite(1, lookupTable[_rgb.green]);
+		ledAnalogWrite(2, lookupTable[_rgb.blue]);
 
 		int dutyCh0 = 0;
 		int dutyCh1 = 0;
@@ -529,15 +478,15 @@ void KnxLed::pwmControl()
 		}
 		else if (actBrightness > actHsv.v)
 		{
-			int dutyCh0 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * MAX_BRIGHTNESS);
-			int dutyCh1 = actBrightness - actHsv.v;
+			dutyCh0 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * MAX_BRIGHTNESS);
+			dutyCh1 = actBrightness - actHsv.v;
 		}
 		ledAnalogWrite(3, lookupTable[dutyCh0]);
 		ledAnalogWrite(4, lookupTable[dutyCh1]);
 	}
 }
 
-void KnxLed::ledAnalogWrite(byte channel, int duty)
+void KnxLed::ledAnalogWrite(byte channel, uint16_t duty)
 {
 #if defined(ESP32)
 	ledcWrite(esp32LedCh[channel], duty);
@@ -676,70 +625,50 @@ void KnxLed::rgb2hsv(const rgb_t rgb, hsv_t &hsv)
 	float g = rgb.green / 255.0f;
 	float b = rgb.blue / 255.0f;
 
-	float h, s, v; // h:0-360.0, s:0.0-1.0, v:0.0-1.0
-
 	float max = max_f(r, g, b);
 	float min = min_f(r, g, b);
+	float d = max - min;
 
-	v = max;
+	float h = 0;
+	float s = max == 0 ? 0 : d / max;
+	float v = max;
 
-	if (max == 0.0f)
+	if (max != min)
 	{
-		s = 0;
-		h = 0;
-	}
-	else if (max - min == 0.0f)
-	{
-		s = 0;
-		h = 0;
-	}
-	else
-	{
-		s = (max - min) / max;
-
 		if (max == r)
 		{
-			h = 60 * ((g - b) / (max - min)) + 0;
+			h = (g - b) / d + (g < b ? 6 : 0);
 		}
 		else if (max == g)
 		{
-			h = 60 * ((b - r) / (max - min)) + 120;
+			h = (b - r) / d + 2;
 		}
 		else
 		{
-			h = 60 * ((r - g) / (max - min)) + 240;
+			h = (r - g) / d + 4;
 		}
+		h /= 6;
 	}
 
-	if (h < 0)
-	{
-		h += 360.0f;
-	}
-	else if (h >= 360)
-	{
-		h -= 360.0f;
-	}
-
-	hsv.h = round(h);		   // dst_h : 0-360
-	hsv.s = round(s * 255.0f); // dst_s : 0-255
-	hsv.v = round(v * 255.0f); // dst_v : 0-255
+	hsv.h = round(h * 255.0f);
+	hsv.s = round(s * 255.0f);
+	hsv.v = round(v * 255.0f);
 }
 
 void KnxLed::hsv2rgb(const hsv_t hsv, rgb_t &rgb)
 {
-	float h = hsv.h;		  // 0-360
-	float s = hsv.s / 255.0f; // 0.0-1.0
-	float v = hsv.v / 255.0f; // 0.0-1.0
+	float h = hsv.h / 255.0f;
+	float s = hsv.s / 255.0f;
+	float v = hsv.v / 255.0f;
 
-	float r = 0, g = 0, b = 0; // 0.0-1.0
+	float r = 0, g = 0, b = 0;
 
-	int hi = (int)(h / 60.0f) % 6;
-	float f = (h / 60.0f) - hi;
-	float p = v * (1.0f - s);
-	float q = v * (1.0f - s * f);
-	float t = v * (1.0f - s * (1.0f - f));
-
-	switch (hi)
+	int i = floor(h * 6);
+	float f = h * 6 - i;
+	float p = v * (1 - s);
+	float q = v * (1 - f * s);
+	float t = v * (1 - (1 - f) * s);
+	switch (i % 6)
 	{
 	case 0:
 		r = v, g = t, b = p;
@@ -854,4 +783,13 @@ void KnxLed::rgb2Rgbw(const rgb_t rgb, rgbw_t &rgbw)
 	rgbw.blue = round(rgbw.blue * factor);
 	rgbw.white = round(rgbw.white * factor);
 	// Serial.printf("RGB OUT2 R=%3d,G=%3d,B=%3d,W=%3d\n", rgbw.red, rgbw.green, rgbw.blue, rgbw.white);
+}
+
+uint8_t KnxLed::rgb2White(const rgb_t rgb)
+{
+	// Set the white value to the highest it can be for the given color
+	// (without over saturating any channel - thus the minimum of them).
+	float minWhiteValue = min_f(rgb.red * 255.0 / whiteRgbEquivalent.red, rgb.green * 255.0 / whiteRgbEquivalent.green, rgb.blue * 255.0 / whiteRgbEquivalent.blue);
+
+	return constrain(minWhiteValue, 0, 255) + 0.5;
 }
