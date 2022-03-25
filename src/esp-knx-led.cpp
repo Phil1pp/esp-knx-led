@@ -57,7 +57,7 @@ void KnxLed::switchLight(bool state)
 			{
 				hsv = defaultHsv;
 			}
-			// If default brightness is set to 0, the last brightness will be restored
+			// If default HSV brightness value is set to 0, the last HSV will be restored
 			else if (savedHsv.v >= MIN_BRIGHTNESS)
 			{
 				hsv = savedHsv;
@@ -102,8 +102,8 @@ void KnxLed::setBrightness(int brightness, bool saveValue)
 		{
 			returnBrightnessFctn(setpointBrightness);
 		}
-		relDimmCmd = DIMM_UNSET;
-		relTemperatureCmd = DIMM_UNSET;
+		relDimmCmd.dimMode = IDLE;
+		relTemperatureCmd.dimMode = IDLE;
 		setpointHsv.v = brightness;
 	}
 }
@@ -121,8 +121,8 @@ void KnxLed::setTemperature(int temperature)
 	{
 		returnTemperatureFctn(setpointTemperature);
 	}
-	relDimmCmd = DIMM_UNSET;
-	relTemperatureCmd = DIMM_UNSET;
+	relDimmCmd.dimMode = IDLE;
+	relTemperatureCmd.dimMode = IDLE;
 	if (currentLightMode != MODE_CCT)
 	{
 		actTemperature = setpointTemperature;
@@ -175,8 +175,8 @@ void KnxLed::setHsv(hsv_t hsv)
 		hsv2rgb(hsv, _rgb);
 		returnColorRgbFctn(_rgb);
 	}
-	relDimmCmd = DIMM_UNSET;
-	relTemperatureCmd = DIMM_UNSET;
+	relDimmCmd.dimMode = IDLE;
+	relTemperatureCmd.dimMode = IDLE;
 	currentLightMode = MODE_RGB;
 	setBrightness(hsv.v);
 }
@@ -207,24 +207,14 @@ void KnxLed::configDimmSpeed(unsigned int dimmSetSpeed)
 	dimmSpeed = dimmSetSpeed;
 }
 
-void KnxLed::setRelDimmCmd(int dimmCmd)
+void KnxLed::setRelDimmCmd(dpt3_t dimmCmd)
 {
-	if (dimmCmd >= DIMM_UP)
-		relDimmCmd = DIMM_UP;
-	else if (dimmCmd >= DIMM_DOWN && dimmCmd < DIMM_STOP2)
-		relDimmCmd = DIMM_DOWN;
-	else
-		relDimmCmd = DIMM_STOP;
+	relDimmCmd = dimmCmd;
 }
 
-void KnxLed::setRelTemperatureCmd(int temperatureCmd)
+void KnxLed::setRelTemperatureCmd(dpt3_t temperatureCmd)
 {
-	if (temperatureCmd >= DIMM_UP)
-		relTemperatureCmd = DIMM_UP;
-	else if (temperatureCmd >= DIMM_DOWN && temperatureCmd < DIMM_STOP2)
-		relTemperatureCmd = DIMM_DOWN;
-	else
-		relTemperatureCmd = DIMM_STOP;
+	relTemperatureCmd = temperatureCmd;
 }
 
 void KnxLed::loop()
@@ -242,7 +232,7 @@ void KnxLed::fade()
 	if (dimmCount >= dimmSpeed)
 	{
 		dimmCount = 0;
-		if (relDimmCmd == DIMM_UP && actBrightness < MAX_BRIGHTNESS)
+		if (relDimmCmd.dimMode == UP && actBrightness < MAX_BRIGHTNESS)
 		{
 			setpointBrightness = actBrightness + 1;
 			if (returnBrightnessFctn != nullptr && (int)(setpointBrightness / 2.55 * 2 + 0.7) % 20 == 0)
@@ -250,7 +240,7 @@ void KnxLed::fade()
 				returnBrightnessFctn(setpointBrightness);
 			}
 		}
-		else if (relDimmCmd == DIMM_DOWN && actBrightness > MIN_BRIGHTNESS)
+		else if (relDimmCmd.dimMode == DOWN && actBrightness > MIN_BRIGHTNESS)
 		{
 			setpointBrightness = actBrightness - 1;
 			if (returnBrightnessFctn != nullptr && (int)(setpointBrightness / 2.55 * 2 + 0.7) % 20 == 0)
@@ -258,17 +248,17 @@ void KnxLed::fade()
 				returnBrightnessFctn(setpointBrightness);
 			}
 		}
-		else if (relDimmCmd == DIMM_STOP || relDimmCmd == DIMM_STOP2)
+		else if (relDimmCmd.dimMode == STOP)
 		{
 			savedBrightness = setpointBrightness; // = actBrightness;
 			if (returnBrightnessFctn != nullptr)
 			{
 				returnBrightnessFctn(setpointBrightness);
 			}
-			relDimmCmd = DIMM_UNSET;
+			relDimmCmd.dimMode = IDLE;
 		}
 
-		if (relTemperatureCmd == DIMM_UP && actTemperature < 6500)
+		if (relTemperatureCmd.dimMode == UP && actTemperature < 6500)
 		{
 			setpointTemperature = min(actTemperature + 20, 6500);
 			if (returnTemperatureFctn != nullptr && setpointTemperature % 300 == 0)
@@ -276,7 +266,7 @@ void KnxLed::fade()
 				returnTemperatureFctn(setpointTemperature);
 			}
 		}
-		else if (relTemperatureCmd == DIMM_DOWN && actTemperature > 2700)
+		else if (relTemperatureCmd.dimMode == DOWN && actTemperature > 2700)
 		{
 			setpointTemperature = max(actTemperature - 20, 2700);
 			if (returnTemperatureFctn != nullptr && setpointTemperature % 300 == 0)
@@ -284,13 +274,13 @@ void KnxLed::fade()
 				returnTemperatureFctn(setpointTemperature);
 			}
 		}
-		else if (relTemperatureCmd == DIMM_STOP || relTemperatureCmd == DIMM_STOP2)
+		else if (relTemperatureCmd.dimMode == STOP)
 		{
 			if (returnTemperatureFctn != nullptr)
 			{
 				returnTemperatureFctn(setpointTemperature);
 			}
-			relTemperatureCmd = DIMM_UNSET;
+			relTemperatureCmd.dimMode = IDLE;
 		}
 	}
 
@@ -555,8 +545,8 @@ void KnxLed::initTunableWhiteLight(uint8_t cwPin, uint8_t wwPin, __cctMode cctMo
 	lightType = TUNABLEWHITE;
 	outputPins[0] = cwPin;
 	outputPins[1] = wwPin;
-	isTwBipolar = cctMode == bipolar;
-	isTwTempCh = cctMode == tempChannel;
+	isTwBipolar = cctMode == BIPOLAR;
+	isTwTempCh = cctMode == TEMP_CHANNEL;
 	initOutputChannels(2);
 }
 
@@ -590,8 +580,8 @@ void KnxLed::initRgbcctLight(uint8_t rPin, uint8_t gPin, uint8_t bPin, uint8_t c
 	outputPins[2] = bPin;
 	outputPins[3] = cwPin;
 	outputPins[4] = wwPin;
-	isTwBipolar = cctMode == bipolar;
-	isTwTempCh = cctMode == tempChannel;
+	isTwBipolar = cctMode == BIPOLAR;
+	isTwTempCh = cctMode == TEMP_CHANNEL;
 	initOutputChannels(5);
 }
 
@@ -744,45 +734,6 @@ void KnxLed::kelvin2rgb(const uint16_t temperature, const uint8_t brightness, rg
 	rgb.red = constrain(red, 0, 255) + 0.5;
 	rgb.green = constrain(green, 0, 255) + 0.5;
 	rgb.blue = constrain(blue, 0, 255) + 0.5;
-}
-
-void KnxLed::rgb2Rgbw(const rgb_t rgb, rgbw_t &rgbw)
-{
-	// be to get the corresponding color value.
-	double whiteValueForRed = rgb.red * 255.0 / whiteRgbEquivalent.red;
-	double whiteValueForGreen = rgb.green * 255.0 / whiteRgbEquivalent.green;
-	double whiteValueForBlue = rgb.blue * 255.0 / whiteRgbEquivalent.blue;
-
-	// Set the white value to the highest it can be for the given color
-	// (without over saturating any channel - thus the minimum of them).
-	double minWhiteValue = min(whiteValueForRed,
-							   min(whiteValueForGreen,
-								   whiteValueForBlue));
-
-	// The rest of the channels will just be the original value minus the
-	// contribution by the white channel.
-	rgbw.red = rgb.red - round(minWhiteValue * whiteRgbEquivalent.red / 255.0);
-	rgbw.green = rgb.green - round(minWhiteValue * whiteRgbEquivalent.green / 255.0);
-	rgbw.blue = rgb.blue - round(minWhiteValue * whiteRgbEquivalent.blue / 255.0);
-	rgbw.white = constrain(minWhiteValue, 0, 255) + 0.5;
-	// Serial.printf("RGB IN: R=%3d,G=%3d,B=%3d OUT R=%3d,G=%3d,B=%3d,W=%3d\n", rgb.red, rgb.green, rgb.blue, rgbw.red, rgbw.green, rgbw.blue, rgbw.white);
-
-	double maxRgbIn = max(rgb.red,
-						  max(rgb.green,
-							  rgb.blue));
-	double maxRgbOut = max(rgbw.red, max(rgbw.green,
-										 max(rgbw.blue,
-											 rgbw.white)));
-	double factor = 0.0;
-	if (maxRgbOut > 0)
-	{
-		factor = maxRgbIn / maxRgbOut;
-	}
-	rgbw.red = round(rgbw.red * factor);
-	rgbw.green = round(rgbw.green * factor);
-	rgbw.blue = round(rgbw.blue * factor);
-	rgbw.white = round(rgbw.white * factor);
-	// Serial.printf("RGB OUT2 R=%3d,G=%3d,B=%3d,W=%3d\n", rgbw.red, rgbw.green, rgbw.blue, rgbw.white);
 }
 
 uint8_t KnxLed::rgb2White(const rgb_t rgb)
