@@ -56,17 +56,36 @@ void KnxLed::switchLight(bool state)
 			if (defaultHsv.v >= MIN_BRIGHTNESS)
 			{
 				hsv = defaultHsv;
+				setHsv(hsv);
+			}
+			else if (defaultTemperature > 0)
+			{
+				setTemperature(defaultTemperature);
+				if (defaultBrightness >= MIN_BRIGHTNESS)
+				{
+					setBrightness(defaultBrightness);
+				}
+				// If default brightness is set to 0, the last brightness will be restored
+				else if (savedBrightness >= MIN_BRIGHTNESS)
+				{
+					setBrightness(savedBrightness);
+				}
+				else
+				{
+					setBrightness(MAX_BRIGHTNESS);
+				}
 			}
 			// If default HSV brightness value is set to 0, the last HSV will be restored
 			else if (savedHsv.v >= MIN_BRIGHTNESS)
 			{
 				hsv = savedHsv;
+				setHsv(hsv);
 			}
 			else
 			{
 				hsv = {50, 255, 255};
+				setHsv(hsv);
 			}
-			setHsv(hsv);
 		}
 		else
 		{
@@ -128,7 +147,7 @@ void KnxLed::setTemperature(int temperature)
 		actTemperature = setpointTemperature;
 		currentLightMode = MODE_CCT;
 	}
-	if (lightType == RGBW)
+	if (lightType == RGB || lightType == RGBW) // no separate CCT channels
 	{
 		rgb_t _rgb;
 		hsv_t _hsv;
@@ -438,7 +457,7 @@ void KnxLed::pwmControl()
 		ledAnalogWrite(1, lookupTable[_rgb.green]);
 		ledAnalogWrite(2, lookupTable[_rgb.blue]);
 		ledAnalogWrite(3, lookupTable[white]);
-		
+
 		/*rgbw_t _rgbw;
 		rgb2Rgbw(_rgb, _rgbw);
 
