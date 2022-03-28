@@ -104,22 +104,19 @@ void KnxLed::switchLight(bool state)
 	}
 }
 
-void KnxLed::setBrightness(int brightness)
+void KnxLed::setBrightness(uint8_t brightness)
 {
 	setBrightness(brightness, true);
 }
 
-void KnxLed::setBrightness(int brightness, bool saveValue)
+void KnxLed::setBrightness(uint8_t brightness, bool saveValue)
 {
 	if (brightness != setpointBrightness)
 	{
-		if (brightness >= 0 && brightness <= MAX_BRIGHTNESS)
+		setpointBrightness = constrain(brightness, 0, MAX_BRIGHTNESS);
+		if (setpointBrightness > 0 && saveValue)
 		{
-			setpointBrightness = brightness;
-			if (setpointBrightness > 0 && saveValue)
-			{
-				savedBrightness = setpointBrightness;
-			}
+			savedBrightness = setpointBrightness;
 		}
 		if (returnBrightnessFctn != nullptr)
 		{
@@ -131,15 +128,9 @@ void KnxLed::setBrightness(int brightness, bool saveValue)
 	}
 }
 
-void KnxLed::setTemperature(int temperature)
+void KnxLed::setTemperature(uint16_t temperature)
 {
-	if (lightType != TUNABLEWHITE && lightType != RGBW && lightType != RGBCT)
-		return;
-
-	if (temperature >= 2700 && temperature <= 6500)
-	{
-		setpointTemperature = temperature;
-	}
+	setpointTemperature = constrain(temperature, 2700, 6500);
 	if (returnTemperatureFctn != nullptr)
 	{
 		returnTemperatureFctn(setpointTemperature);
@@ -204,19 +195,19 @@ void KnxLed::setHsv(hsv_t hsv)
 	setBrightness(hsv.v);
 }
 
-void KnxLed::configDefaultBrightness(int brightness)
+void KnxLed::configDefaultBrightness(uint8_t brightness)
 {
 	if (brightness >= 0 && brightness <= MAX_BRIGHTNESS)
 	{
 		defaultBrightness = brightness;
-		if(defaultHsv.v > 0)
+		if (defaultHsv.v > 0)
 		{
 			defaultHsv.v = brightness;
 		}
 	}
 }
 
-void KnxLed::configDefaultTemperature(int temperature)
+void KnxLed::configDefaultTemperature(uint16_t temperature)
 {
 	if (temperature == 0 || (temperature >= 2700 && temperature <= 6500))
 	{
@@ -229,7 +220,7 @@ void KnxLed::configDefaultHsv(hsv_t hsv)
 	defaultHsv = hsv;
 }
 
-void KnxLed::configDimmSpeed(unsigned int dimmSetSpeed)
+void KnxLed::configDimmSpeed(uint8_t dimmSetSpeed)
 {
 	dimmSpeed = dimmSetSpeed;
 }
@@ -320,12 +311,12 @@ void KnxLed::fade()
 
 	if (setpointTemperature > actTemperature)
 	{
-		actTemperature = min(actTemperature + 20, setpointTemperature);
+		actTemperature = min<uint16_t>(actTemperature + 20, setpointTemperature);
 		updatePwm = true;
 	}
 	else if (setpointTemperature < actTemperature)
 	{
-		actTemperature = max(actTemperature - 20, setpointTemperature);
+		actTemperature = max<uint16_t>(actTemperature - 20, setpointTemperature);
 		updatePwm = true;
 	}
 
@@ -412,8 +403,8 @@ void KnxLed::pwmControl()
 			// 2-Wire tunable LEDs. Different polarity for each channel controlled by 4quadrant H-Brige
 			float maxBt = actBrightness * 1023.0 / MAX_BRIGHTNESS / 3800.0;
 
-			int dutyCh0 = round((actTemperature - 2700) * maxBt);
-			int dutyCh1 = round((6500 - actTemperature) * maxBt);
+			int dutyCh0 = constrain((actTemperature - 2700) * maxBt, 0, 255) + 0.5;
+			int dutyCh1 = constrain((6500 - actTemperature) * maxBt, 0, 255) + 0.5;
 #if defined(ESP32)
 			ledc_set_duty_with_hpoint(LEDC_HIGH_SPEED_MODE, esp32LedCh[0], dutyCh0, 0);
 			ledc_set_duty_with_hpoint(LEDC_HIGH_SPEED_MODE, esp32LedCh[1], dutyCh1, dutyCh0);
@@ -427,21 +418,22 @@ void KnxLed::pwmControl()
 		}
 		else
 		{
-			int dutyCh0 = 0;
-			int dutyCh1 = 0;
-
+			uint16_t dutyCh0 = 0;
+			uint16_t dutyCh1 = 0;
 			if (!isTwTempCh)
 			{
-				dutyCh0 = round(min(2 * (actTemperature - 2700), 3800) / 3800.0 * actBrightness);
-				dutyCh1 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * actBrightness);
+				dutyCh0 = constrain(min(2 * (actTemperature - 2700), 3800) / 3800.0 * actBrightness, 0, 255) + 0.5;
+				dutyCh1 = constrain(min(2 * (6500 - actTemperature), 3800) / 3800.0 * actBrightness, 0, 255) + 0.5;
+				dutyCh0 = lookupTable[dutyCh0];
+				dutyCh1 = lookupTable[dutyCh1];
 			}
 			else if (actBrightness > 0)
-			{				
-				dutyCh0 = actBrightness;
-				dutyCh1 = round((actTemperature - 2700) / 3800.0 * MAX_BRIGHTNESS); 
+			{
+				dutyCh0 = lookupTableTwBulb[actBrightness];
+				dutyCh1 = constrain((actTemperature - 2700) / 3800.0 * 1023, 0, 1023) + 0.5;
 			}
-			ledAnalogWrite(0, lookupTable[dutyCh0]);
-			ledAnalogWrite(1, lookupTable[dutyCh1]);
+			ledAnalogWrite(0, dutyCh0);
+			ledAnalogWrite(1, dutyCh1);
 		}
 		break;
 	}
@@ -484,22 +476,24 @@ void KnxLed::pwmControl()
 		ledAnalogWrite(0, lookupTable[_rgb.red]);
 		ledAnalogWrite(1, lookupTable[_rgb.green]);
 		ledAnalogWrite(2, lookupTable[_rgb.blue]);
-
-		int dutyCh0 = 0;
-		int dutyCh1 = 0;
+		uint16_t dutyCh3 = 0;
+		uint16_t dutyCh4 = 0;
 
 		if (!isTwTempCh)
 		{
-			dutyCh0 = round(min(2 * (actTemperature - 2700), 3800) / 3800.0 * (actBrightness - actHsv.v));
-			dutyCh1 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * (actBrightness - actHsv.v));
+			dutyCh3 = constrain(min(2 * (actTemperature - 2700), 3800) / 3800.0 * (actBrightness - actHsv.v), 0, 255) + 0.5;
+			dutyCh4 = constrain(min(2 * (6500 - actTemperature), 3800) / 3800.0 * (actBrightness - actHsv.v), 0, 255) + 0.5;
+			dutyCh3 = lookupTable[dutyCh3];
+			dutyCh4 = lookupTable[dutyCh4];
+			
 		}
 		else if (actBrightness > actHsv.v)
 		{
-			dutyCh0 = actBrightness - actHsv.v;
-			dutyCh1 = round((actTemperature - 2700) / 3800.0 * MAX_BRIGHTNESS);
+			dutyCh3 = lookupTableTwBulb[constrain(actBrightness - actHsv.v, 0, 255)];
+			dutyCh4 = constrain((actTemperature - 2700) / 3800.0 * 1023, 0, 1023) + 0.5;
 		}
-		ledAnalogWrite(3, lookupTable[dutyCh0]);
-		ledAnalogWrite(4, lookupTable[dutyCh1]);
+		ledAnalogWrite(3, dutyCh3);
+		ledAnalogWrite(4, dutyCh4);
 	}
 }
 
@@ -517,12 +511,12 @@ bool KnxLed::getSwitchState()
 	return setpointBrightness > 0;
 }
 
-int KnxLed::getBrightness()
+uint8_t KnxLed::getBrightness()
 {
-	return max(0, actBrightness);
+	return max<uint8_t>(0, actBrightness);
 }
 
-int KnxLed::getTemperature()
+uint16_t KnxLed::getTemperature()
 {
 	return actTemperature;
 }
@@ -532,12 +526,12 @@ void KnxLed::registerStatusCallback(callbackBool *fctn)
 	returnStatusFctn = fctn;
 }
 
-void KnxLed::registerBrightnessCallback(callbackInt *fctn)
+void KnxLed::registerBrightnessCallback(callbackUint8 *fctn)
 {
 	returnBrightnessFctn = fctn;
 }
 
-void KnxLed::registerTemperatureCallback(callbackInt *fctn)
+void KnxLed::registerTemperatureCallback(callbackUint16 *fctn)
 {
 	returnTemperatureFctn = fctn;
 }
@@ -667,9 +661,9 @@ void KnxLed::rgb2hsv(const rgb_t rgb, hsv_t &hsv)
 		h /= 6;
 	}
 
-	hsv.h = round(h * 255.0f);
-	hsv.s = round(s * 255.0f);
-	hsv.v = round(v * 255.0f);
+	hsv.h = constrain(h * 255.0f, 0, 255) + 0.5;
+	hsv.s = constrain(s * 255.0f, 0, 255) + 0.5;
+	hsv.v = constrain(v * 255.0f, 0, 255) + 0.5;
 }
 
 void KnxLed::hsv2rgb(const hsv_t hsv, rgb_t &rgb)
@@ -707,9 +701,9 @@ void KnxLed::hsv2rgb(const hsv_t hsv, rgb_t &rgb)
 		break;
 	}
 
-	rgb.red = round(r * 255.0f);
-	rgb.green = round(g * 255.0f);
-	rgb.blue = round(b * 255.0f);
+	rgb.red = constrain(r * 255.0f, 0, 255) + 0.5;
+	rgb.green = constrain(g * 255.0f, 0, 255) + 0.5;
+	rgb.blue = constrain(b * 255.0f, 0, 255) + 0.5;
 }
 
 void KnxLed::kelvin2rgb(const uint16_t temperature, const uint8_t brightness, rgb_t &rgb)
@@ -753,9 +747,9 @@ void KnxLed::kelvin2rgb(const uint16_t temperature, const uint8_t brightness, rg
 		blue = 255;
 	}
 
-	red = red * brightness / 255;
-	green = green * brightness / 255;
-	blue = blue * brightness / 255;
+	red = red * brightness / 255.0f;
+	green = green * brightness / 255.0f;
+	blue = blue * brightness / 255.0f;
 
 	// Constrains values for 8 bit PWM
 	rgb.red = constrain(red, 0, 255) + 0.5;
@@ -767,7 +761,7 @@ uint8_t KnxLed::rgb2White(const rgb_t rgb)
 {
 	// Set the white value to the highest it can be for the given color
 	// (without over saturating any channel - thus the minimum of them).
-	float minWhiteValue = min_f(rgb.red * 255.0 / whiteRgbEquivalent.red, rgb.green * 255.0 / whiteRgbEquivalent.green, rgb.blue * 255.0 / whiteRgbEquivalent.blue);
+	float minWhiteValue = min_f(rgb.red * 255.0f / whiteRgbEquivalent.red, rgb.green * 255.0f / whiteRgbEquivalent.green, rgb.blue * 255.0f / whiteRgbEquivalent.blue);
 
 	return constrain(minWhiteValue, 0, 255) + 0.5;
 }
