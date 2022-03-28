@@ -75,6 +75,10 @@ void KnxLed::switchLight(bool state)
 					setBrightness(MAX_BRIGHTNESS);
 				}
 			}
+			else if (defaultBrightness >= MIN_BRIGHTNESS)
+			{
+				setBrightness(defaultBrightness);
+			}
 			// If default HSV brightness value is set to 0, the last HSV will be restored
 			else if (savedHsv.v >= MIN_BRIGHTNESS)
 			{
@@ -205,6 +209,10 @@ void KnxLed::configDefaultBrightness(int brightness)
 	if (brightness >= 0 && brightness <= MAX_BRIGHTNESS)
 	{
 		defaultBrightness = brightness;
+		if(defaultHsv.v > 0)
+		{
+			defaultHsv.v = brightness;
+		}
 	}
 }
 
@@ -428,9 +436,9 @@ void KnxLed::pwmControl()
 				dutyCh1 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * actBrightness);
 			}
 			else if (actBrightness > 0)
-			{
-				dutyCh0 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * MAX_BRIGHTNESS);
-				dutyCh1 = actBrightness;
+			{				
+				dutyCh0 = actBrightness;
+				dutyCh1 = round((actTemperature - 2700) / 3800.0 * MAX_BRIGHTNESS); 
 			}
 			ledAnalogWrite(0, lookupTable[dutyCh0]);
 			ledAnalogWrite(1, lookupTable[dutyCh1]);
@@ -487,8 +495,8 @@ void KnxLed::pwmControl()
 		}
 		else if (actBrightness > actHsv.v)
 		{
-			dutyCh0 = round(min(2 * (6500 - actTemperature), 3800) / 3800.0 * MAX_BRIGHTNESS);
-			dutyCh1 = actBrightness - actHsv.v;
+			dutyCh0 = actBrightness - actHsv.v;
+			dutyCh1 = round((actTemperature - 2700) / 3800.0 * MAX_BRIGHTNESS);
 		}
 		ledAnalogWrite(3, lookupTable[dutyCh0]);
 		ledAnalogWrite(4, lookupTable[dutyCh1]);
