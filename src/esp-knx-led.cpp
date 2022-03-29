@@ -403,8 +403,8 @@ void KnxLed::pwmControl()
 			// 2-Wire tunable LEDs. Different polarity for each channel controlled by 4quadrant H-Brige
 			float maxBt = actBrightness * 1023.0 / MAX_BRIGHTNESS / 3800.0;
 
-			int dutyCh0 = constrain((actTemperature - 2700) * maxBt, 0, 255) + 0.5;
-			int dutyCh1 = constrain((6500 - actTemperature) * maxBt, 0, 255) + 0.5;
+			int dutyCh0 = constrain((actTemperature - 2700) * maxBt, 0, 1023) + 0.5;
+			int dutyCh1 = constrain((6500 - actTemperature) * maxBt, 0, 1023) + 0.5;
 #if defined(ESP32)
 			ledc_set_duty_with_hpoint(LEDC_HIGH_SPEED_MODE, esp32LedCh[0], dutyCh0, 0);
 			ledc_set_duty_with_hpoint(LEDC_HIGH_SPEED_MODE, esp32LedCh[1], dutyCh1, dutyCh0);
