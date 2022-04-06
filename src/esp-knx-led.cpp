@@ -146,8 +146,9 @@ void KnxLed::setTemperature(uint16_t temperature)
 	{
 		rgb_t _rgb;
 		hsv_t _hsv;
-		kelvin2rgb(setpointTemperature, setpointBrightness, _rgb);
+		kelvin2rgb(setpointTemperature, MAX_BRIGHTNESS, _rgb);
 		rgb2hsv(_rgb, _hsv);
+		_hsv.v = setpointBrightness;
 		setpointHsv = _hsv;
 	}
 }
