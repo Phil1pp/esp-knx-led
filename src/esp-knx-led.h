@@ -195,6 +195,8 @@ public:
 
     void setRelDimmCmd(dpt3_t dimmCmd);
     void setRelTemperatureCmd(dpt3_t temperatureCmd);
+    void setRelHueCmd(dpt3_t hueCmd);
+    void setRelSaturationCmd(dpt3_t saturationCmd);
 
     bool getSwitchState();
     uint8_t getBrightness();
@@ -242,6 +244,8 @@ private:
 
     dpt3_t relDimmCmd;
     dpt3_t relTemperatureCmd;
+    dpt3_t relHueCmd;
+    dpt3_t relSaturationCmd;
 
     callbackBool *returnStatusFctn;
     callbackUint8 *returnBrightnessFctn;
@@ -253,6 +257,7 @@ private:
     void fade();
     void pwmControl();
     void ledAnalogWrite(byte channel, uint16_t duty);
+    void returnColors();
     void rgb2hsv(const rgb_t rgb, hsv_t &hsv);
     void hsv2rgb(const hsv_t hsv, rgb_t &rgb);
     void kelvin2rgb(const uint16_t temperature, const uint8_t brightness, rgb_t &rgb);
