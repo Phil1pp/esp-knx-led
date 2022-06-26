@@ -625,7 +625,7 @@ void KnxLed::returnColors()
 	if (returnColorRgbFctn != nullptr)
 	{
 		rgb_t _rgb;
-		hsv2rgb(actHsv, _rgb);
+		hsv2rgb(setpointHsv, _rgb);
 		returnColorRgbFctn(_rgb);
 	}
 }
