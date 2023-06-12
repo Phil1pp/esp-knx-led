@@ -118,10 +118,7 @@ void KnxLed::setBrightness(uint8_t brightness, bool saveValue)
 		{
 			savedBrightness = setpointBrightness;
 		}
-		if (returnBrightnessFctn != nullptr)
-		{
-			returnBrightnessFctn(setpointBrightness);
-		}
+		returnBrightness();
 		relDimmCmd.dimMode = IDLE;
 		relTemperatureCmd.dimMode = IDLE;
 		setpointHsv.v = brightness;
@@ -131,10 +128,7 @@ void KnxLed::setBrightness(uint8_t brightness, bool saveValue)
 void KnxLed::setTemperature(uint16_t temperature)
 {
 	setpointTemperature = constrain(temperature, 2700, 6500);
-	if (returnTemperatureFctn != nullptr)
-	{
-		returnTemperatureFctn(setpointTemperature);
-	}
+	returnTemperature();
 	relDimmCmd.dimMode = IDLE;
 	relTemperatureCmd.dimMode = IDLE;
 	if (currentLightMode != MODE_CCT)
@@ -142,7 +136,7 @@ void KnxLed::setTemperature(uint16_t temperature)
 		actTemperature = setpointTemperature;
 		currentLightMode = MODE_CCT;
 	}
-	if (lightType == RGB || lightType == RGBW) // no separate CCT channels
+	if (lightType == RGB /*|| lightType == RGBW*/) // no separate CCT channels
 	{
 		rgb_t _rgb;
 		hsv_t _hsv;
@@ -204,6 +198,11 @@ void KnxLed::configDefaultTemperature(uint16_t temperature)
 	if (temperature == 0 || (temperature >= 2700 && temperature <= 6500))
 	{
 		defaultTemperature = temperature;
+		if(setpointBrightness == 0)
+		{
+			setpointTemperature = defaultTemperature;
+    		actTemperature = defaultTemperature;
+		}
 	}
 }
 
@@ -284,58 +283,52 @@ void KnxLed::fade()
 		if (relDimmCmd.dimMode == UP && actBrightness < MAX_BRIGHTNESS)
 		{
 			setpointBrightness = actBrightness + 1;
-			if (returnBrightnessFctn != nullptr && (int)(setpointBrightness / 2.55 * 2 + 0.7) % 20 == 0)
+			if ((int)(setpointBrightness / 2.55 * 2 + 0.7) % 20 == 0)
 			{
-				returnBrightnessFctn(setpointBrightness);
+				returnBrightness();
 			}
 		}
 		else if (relDimmCmd.dimMode == DOWN && actBrightness > MIN_BRIGHTNESS)
 		{
 			setpointBrightness = actBrightness - 1;
-			if (returnBrightnessFctn != nullptr && (int)(setpointBrightness / 2.55 * 2 + 0.7) % 20 == 0)
+			if ((int)(setpointBrightness / 2.55 * 2 + 0.7) % 20 == 0)
 			{
-				returnBrightnessFctn(setpointBrightness);
+				returnBrightness();
 			}
 		}
 		else if (relDimmCmd.dimMode == STOP)
 		{
 			savedBrightness = setpointBrightness; // = actBrightness;
-			if (returnBrightnessFctn != nullptr)
-			{
-				returnBrightnessFctn(setpointBrightness);
-			}
+			returnBrightness();
 			relDimmCmd.dimMode = IDLE;
 		}
 
 		if (relTemperatureCmd.dimMode == UP && actTemperature < 6500)
 		{
 			setpointTemperature = min(actTemperature + 20, 6500);
-			if (returnTemperatureFctn != nullptr && setpointTemperature % 300 == 0)
+			if (setpointTemperature % 300 == 0)
 			{
-				returnTemperatureFctn(setpointTemperature);
+				returnTemperature();
 			}
 		}
 		else if (relTemperatureCmd.dimMode == DOWN && actTemperature > 2700)
 		{
 			setpointTemperature = max(actTemperature - 20, 2700);
-			if (returnTemperatureFctn != nullptr && setpointTemperature % 300 == 0)
+			if (setpointTemperature % 300 == 0)
 			{
-				returnTemperatureFctn(setpointTemperature);
+				returnTemperature();
 			}
 		}
 		else if (relTemperatureCmd.dimMode == STOP)
 		{
-			if (returnTemperatureFctn != nullptr)
-			{
-				returnTemperatureFctn(setpointTemperature);
-			}
+			returnTemperature();
 			relTemperatureCmd.dimMode = IDLE;
 		}
 
 		if (relHueCmd.dimMode == UP)
 		{
 			setpointHsv.h = actHsv.h + 1;
-			if (returnColorHsvFctn != nullptr && (int)(setpointHsv.h / 2.55 * 2 + 0.7) % 20 == 0)
+			if ((int)(setpointHsv.h / 2.55 * 2 + 0.7) % 20 == 0)
 			{
 				returnColors();
 			}
@@ -343,7 +336,7 @@ void KnxLed::fade()
 		else if (relHueCmd.dimMode == DOWN)
 		{
 			setpointHsv.h = actHsv.h - 1;
-			if (returnBrightnessFctn != nullptr && (int)(setpointHsv.h / 2.55 * 2 + 0.7) % 20 == 0)
+			if ((int)(setpointHsv.h / 2.55 * 2 + 0.7) % 20 == 0)
 			{
 				returnColors();
 			}
@@ -351,17 +344,14 @@ void KnxLed::fade()
 		else if (relHueCmd.dimMode == STOP)
 		{
 			savedHsv.h = setpointHsv.h;
-			if (returnBrightnessFctn != nullptr)
-			{
-				returnColors();
-			}
+			returnColors();
 			relHueCmd.dimMode = IDLE;
 		}
 
 		if (relSaturationCmd.dimMode == UP && actHsv.s < 255)
 		{
 			setpointHsv.s = actHsv.s + 1;
-			if (returnColorHsvFctn != nullptr && (int)(setpointHsv.s / 2.55 * 2 + 0.7) % 20 == 0)
+			if ((int)(setpointHsv.s / 2.55 * 2 + 0.7) % 20 == 0)
 			{
 				returnColors();
 			}
@@ -369,7 +359,7 @@ void KnxLed::fade()
 		else if (relSaturationCmd.dimMode == DOWN && actHsv.s > 0)
 		{
 			setpointHsv.s = actHsv.s - 1;
-			if (returnBrightnessFctn != nullptr && (int)(setpointHsv.s / 2.55 * 2 + 0.7) % 20 == 0)
+			if ((int)(setpointHsv.s / 2.55 * 2 + 0.7) % 20 == 0)
 			{
 				returnColors();
 			}
@@ -377,10 +367,7 @@ void KnxLed::fade()
 		else if (relSaturationCmd.dimMode == STOP)
 		{
 			savedHsv.s = setpointHsv.s;
-			if (returnBrightnessFctn != nullptr)
-			{
-				returnColors();
-			}
+			returnColors();
 			relSaturationCmd.dimMode = IDLE;
 		}
 	}
@@ -429,7 +416,7 @@ void KnxLed::fade()
 		updatePwm = true;
 	}
 
-	if (lightType == RGBCT && currentLightMode == MODE_CCT)
+	if (currentLightMode == MODE_CCT && (lightType == RGBCT || lightType == RGBW))
 	{
 		if (actHsv.v > 0)
 		{
@@ -452,13 +439,9 @@ void KnxLed::fade()
 		pwmControl();
 		if (returnStatusFctn != nullptr)
 		{
-			if (actBrightness == 0 && oldBrightness != 0)
+			if ((actBrightness == 0) != (oldBrightness == 0))
 			{
-				returnStatusFctn(false);
-			}
-			else if (oldBrightness == 0 && actBrightness != 0)
-			{
-				returnStatusFctn(true);
+				returnStatus();
 			}
 		}
 	}
@@ -532,23 +515,34 @@ void KnxLed::pwmControl()
 	}
 	case RGBW:
 	{
-		rgb_t _rgb;
+		/*rgb_t _rgb;
 		hsv2rgb(actHsv, _rgb);
-		uint8_t white = rgb2White(_rgb);
+		uint8_t white = rgb2White(_rgb);*/
+		
+		rgb_t _rgb;
+		uint8_t white;				
+		if (currentLightMode == MODE_CCT)
+		{
+			kelvin2rgb(actTemperature, MAX_BRIGHTNESS, _rgb);
+			float r = _rgb.red + (_rgb.red - whiteRgbEquivalent.red)/2.0;
+			float g = _rgb.green + (_rgb.green - whiteRgbEquivalent.green)/2.0;
+			float b = _rgb.blue + (_rgb.blue - whiteRgbEquivalent.blue)/2.0;
+			float factor = max_f(r, g, b)/actBrightness;
+			_rgb.red = constrain(r/factor, 0, 255) + 0.5;
+			_rgb.green = constrain(g/factor, 0, 255) + 0.5;
+			_rgb.blue = constrain(b/factor, 0, 255) + 0.5;
+			white = actBrightness;
+		}
+		else
+		{
+			hsv2rgb(actHsv, _rgb);
+			white = rgb2White(_rgb);
+		}
 
 		ledAnalogWrite(0, lookupTable[_rgb.red]);
 		ledAnalogWrite(1, lookupTable[_rgb.green]);
 		ledAnalogWrite(2, lookupTable[_rgb.blue]);
 		ledAnalogWrite(3, lookupTable[white]);
-
-		/*rgbw_t _rgbw;
-		rgb2Rgbw(_rgb, _rgbw);
-
-		ledAnalogWrite(0, lookupTable[_rgbw.red]);
-		ledAnalogWrite(1, lookupTable[_rgbw.green]);
-		ledAnalogWrite(2, lookupTable[_rgbw.blue]);
-		ledAnalogWrite(3, lookupTable[_rgbw.white]);*/
-
 		break;
 	}
 	case RGBCT:
@@ -616,6 +610,30 @@ hsv_t KnxLed::getHsv()
 	return actHsv;
 }
 
+void KnxLed::returnStatus()
+{
+	if (returnStatusFctn != nullptr)
+	{
+		returnStatusFctn(getSwitchState());
+	}
+}
+
+void KnxLed::returnBrightness()
+{
+	if (returnBrightnessFctn != nullptr)
+	{
+		returnBrightnessFctn(setpointBrightness);
+	}
+}
+
+void KnxLed::returnTemperature()
+{
+	if (returnTemperatureFctn != nullptr)
+	{
+		returnTemperatureFctn(setpointTemperature);
+	}
+}
+
 void KnxLed::returnColors()
 {
 	if (returnColorHsvFctn != nullptr)
@@ -653,6 +671,14 @@ void KnxLed::registerColorRgbCallback(callbackRgb *fctn)
 void KnxLed::registerColorHsvCallback(callbackHsv *fctn)
 {
 	returnColorHsvFctn = fctn;
+}
+
+void KnxLed::sendStatusUpdate()
+{
+	returnStatus();
+    returnBrightness();
+    returnTemperature();
+    returnColors();
 }
 
 void KnxLed::initSwitchableLight(uint8_t switchPin)

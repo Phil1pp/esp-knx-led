@@ -198,6 +198,8 @@ public:
     void setRelHueCmd(dpt3_t hueCmd);
     void setRelSaturationCmd(dpt3_t saturationCmd);
 
+    void sendStatusUpdate();
+
     bool getSwitchState();
     uint8_t getBrightness();
     uint16_t getTemperature();
@@ -240,7 +242,7 @@ private:
 
     bool isTwBipolar = false;     // Tunable White with 2-Wires and different polarity for each channel
     bool isTwTempCh = false;      // Tunable White with brightness channel and temperature channel
-    rgb_t whiteRgbEquivalent = {255, 219, 186}; // 4500k color temperature warm white LED
+    rgb_t whiteRgbEquivalent;     // Color temperature of white LED for RGBW
 
     dpt3_t relDimmCmd;
     dpt3_t relTemperatureCmd;
@@ -257,6 +259,9 @@ private:
     void fade();
     void pwmControl();
     void ledAnalogWrite(byte channel, uint16_t duty);
+    void returnStatus();
+    void returnBrightness();
+    void returnTemperature();
     void returnColors();
     void rgb2hsv(const rgb_t rgb, hsv_t &hsv);
     void hsv2rgb(const hsv_t hsv, rgb_t &rgb);
