@@ -161,6 +161,11 @@ void KnxLed::setRgb(rgb_t rgb)
 	{
 		rgb2hsv(rgb, _hsv);
 	}
+	// if light is already on, don't change brightness unless brightness is set in RGB
+	if (actHsv.v > 0 && _hsv.v == 255)
+	{
+		_hsv.v = setpointHsv.v;
+	}
 	setHsv(_hsv);
 }
 
