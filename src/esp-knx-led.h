@@ -7,6 +7,8 @@
 extern byte nextEsp32LedChannel; // next available LED channel for ESP32
 #elif defined(ESP8266)
 #pragma message "Building KnxLed for ESP8266"
+#elif defined(LIBRETINY)
+#pragma message "Building KnxLed for libretiny"
 #else
 #error "Wrong hardware. Not ESP8266 or ESP32"
 #endif
@@ -60,12 +62,12 @@ typedef struct __dpt3
 
     void fromDPT3(uint8_t raw)
     {
-        steps = raw & B111;
+        steps = raw & 0b111;
         if(steps == 0)
         {
             dimMode = STOP;            
         }
-        else if((raw & B1000) == 0)
+        else if((raw & 0b1000) == 0)
         {
             dimMode = DOWN;
         }
@@ -77,7 +79,7 @@ typedef struct __dpt3
 
     uint8_t toDPT3(void)
     {
-        return (dimMode & B1111) | steps;
+        return (dimMode & 0b1111) | steps;
     }
 } dpt3_t;
 
