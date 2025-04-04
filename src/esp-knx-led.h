@@ -28,7 +28,7 @@ const uint16_t lookupTable[256] = {
     439, 445, 450, 456, 461, 467, 472, 478, 484, 490, 496, 502, 508, 514, 520, 526, 532, 538, 545, 551, 557, 564, 570, 577, 584, 590, 597, 604, 611, 618, 625, 632,
     639, 646, 653, 660, 668, 675, 683, 690, 698, 705, 713, 721, 729, 736, 744, 752, 760, 769, 777, 785, 793, 802, 810, 819, 827, 836, 845, 853, 862, 871, 880, 889,
     898, 907, 917, 926, 935, 945, 954, 964, 973, 983, 993, 1003, 1013, 1023};
-
+    
 // lookup table for E27 LED Bulb with logarithmic dimming curve
 const uint16_t lookupTableTwBulb[256] = {
     0, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 
@@ -215,15 +215,17 @@ private:
     LightTypes lightType;
     byte outputPins[5];
     LightMode currentLightMode = MODE_CCT;
+    unsigned int pwmResolution = 10;  // 2^10 = 1024
+    // Default is 1023
+    // All 1022 PWM steps are available at 977Hz, 488Hz, 325Hz, 244Hz, 195Hz, 162Hz, 139Hz, 122Hz, 108Hz, 97Hz, 88Hz, 81Hz, 75Hz, etc.
+    // Calculation = truncate(1/(1E-6 * 1023)) for the PWM frequencies with all (or most) discrete PWM steps. (master)
 #if defined(ESP32)
     unsigned int pwmFrequency = 5000; // 5kHz
-    unsigned int pwmResolution = 10;  // 2^10 = 1024
     ledc_channel_t esp32LedCh[5];
 #elif defined(ESP8266)
     unsigned int pwmFrequency = 2000;  // 2kHz bei Library >=3.0.0, 50Hz bei Library 2.6.3
-    unsigned int pwmResolution = 1023; // Default is 1023
-                                       // All 1022 PWM steps are available at 977Hz, 488Hz, 325Hz, 244Hz, 195Hz, 162Hz, 139Hz, 122Hz, 108Hz, 97Hz, 88Hz, 81Hz, 75Hz, etc.
-                                       // Calculation = truncate(1/(1E-6 * 1023)) for the PWM frequencies with all (or most) discrete PWM steps. (master)
+#elif defined(LIBRETINY)
+    unsigned int pwmFrequency = 1000;  // 1kHz
 #endif
     uint8_t dimmSpeed = 6;
     uint8_t dimmCount = 0;

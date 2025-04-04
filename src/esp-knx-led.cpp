@@ -481,7 +481,7 @@ void KnxLed::pwmControl()
 			ledc_set_duty_with_hpoint(LEDC_HIGH_SPEED_MODE, esp32LedCh[1], dutyCh1, dutyCh0);
 			ledc_update_duty(LEDC_HIGH_SPEED_MODE, esp32LedCh[0]);
 			ledc_update_duty(LEDC_HIGH_SPEED_MODE, esp32LedCh[1]);
-#elif defined(ESP8266)
+#else
 			// TODO
 			ledAnalogWrite(0, lookupTable[dutyCh0]);
 			ledAnalogWrite(1, lookupTable[dutyCh1]);
@@ -566,8 +566,7 @@ void KnxLed::pwmControl()
 			dutyCh3 = constrain(min(2 * (actTemperature - 2700), 3800) / 3800.0 * (actBrightness - actHsv.v), 0, 255) + 0.5;
 			dutyCh4 = constrain(min(2 * (6500 - actTemperature), 3800) / 3800.0 * (actBrightness - actHsv.v), 0, 255) + 0.5;
 			dutyCh3 = lookupTable[dutyCh3];
-			dutyCh4 = lookupTable[dutyCh4];
-			
+			dutyCh4 = lookupTable[dutyCh4];		
 		}
 		else if (actBrightness > actHsv.v)
 		{
@@ -583,7 +582,15 @@ void KnxLed::ledAnalogWrite(byte channel, uint16_t duty)
 {
 #if defined(ESP32)
 	ledcWrite(esp32LedCh[channel], duty);
-#elif defined(ESP8266)
+#elif defined(LIBRETINY)
+	// on Beken hardware, for some reason the LED will flicker if the PWM value changes from 1022 to 1023
+	// therefore limit the value to 1022
+	if(duty == 1023)
+	{
+		duty = 1022;
+	}
+	analogWrite(outputPins[channel], duty);
+#else
 	analogWrite(outputPins[channel], duty);
 #endif
 }
@@ -759,13 +766,17 @@ void KnxLed::initOutputChannels(uint8_t usedChannels)
 			ledcAttachPin(outputPins[i], esp32LedCh[i]);
 		}
 	}
-#elif defined(ESP8266)
+#else
 	for (uint8_t i = 0; i < usedChannels; i++)
 	{
 		pinMode(outputPins[i], OUTPUT);
 	}
-	analogWriteRange(pwmResolution);
-	analogWriteFreq(pwmFrequency);
+	analogWriteResolution(pwmResolution);
+	#if defined(ESP8266)
+		analogWriteFreq(pwmFrequency);
+	#else
+		analogWriteFrequency(pwmFrequency);
+	#endif
 #endif
 	initialized = true;
 }
